@@ -82,12 +82,12 @@ class DropoutBlock(nn.Module):
         self.conv1 = basic_block.conv1
         self.bn1 = basic_block.bn1
         self.relu = basic_block.relu
-        self.drop1 = nn.Dropout2d(dropout_rate)
         self.conv2 = basic_block.conv2
         self.bn2 = basic_block.bn2
         self.downsample = basic_block.downsample
         self.stride = basic_block.stride
-        self.drop2 = nn.Dropout2d(dropout_rate)
+        self.force_dropout = False
+        self.dropout_rate = dropout_rate
 
     def forward(self, x):
         identity = x
@@ -95,7 +95,7 @@ class DropoutBlock(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-        out = self.drop1(out)
+        out = torch.nn.functional.dropout(out, p=self.dropout_rate, training=self.training or self.force_dropout)
         out = self.conv2(out)
         out = self.bn2(out)
 
@@ -104,7 +104,7 @@ class DropoutBlock(nn.Module):
 
         out += identity
         out = self.relu(out)
-        out = self.drop2(out)
+        out = torch.nn.functional.dropout(out, p=self.dropout_rate, training=self.training or self.force_dropout)
 
         return out
 
@@ -255,7 +255,7 @@ class ResNet(nn.Module):
 class DropoutResnet(nn.Module):
     """adds dropout to an existing resnet"""
 
-    def __init__(self, source_resnet: ResNet):
+    def __init__(self, source_resnet: ResNet, dropout_rate: float = .0):
 
         super(DropoutResnet, self).__init__()
         self._norm_layer = source_resnet._norm_layer
@@ -268,15 +268,15 @@ class DropoutResnet(nn.Module):
         self.bn1 = source_resnet.bn1
         self.relu = source_resnet.relu
         self.maxpool = source_resnet.relu
-        self.layer1 = self._make_layer(source_resnet.layer1)
-        self.layer2 = self._make_layer(source_resnet.layer2)
-        self.layer3 = self._make_layer(source_resnet.layer3)
-        self.layer4 = self._make_layer(source_resnet.layer4)
+        self.layer1 = self._make_layer(source_resnet.layer1, dropout_rate)
+        self.layer2 = self._make_layer(source_resnet.layer2, dropout_rate)
+        self.layer3 = self._make_layer(source_resnet.layer3, dropout_rate)
+        self.layer4 = self._make_layer(source_resnet.layer4, dropout_rate)
         self.avgpool = source_resnet.avgpool
         self.fc = source_resnet.fc
 
-    def _make_layer(self, source_layer: nn.Sequential):
-        return nn.Sequential(*[DropoutBlock(block) for block in source_layer.children()])
+    def _make_layer(self, source_layer: nn.Sequential, dropout_rate):
+        return nn.Sequential(*[DropoutBlock(block, dropout_rate) for block in source_layer.children()])
 
     def _forward(self, x):
         x = self.conv1(x)
