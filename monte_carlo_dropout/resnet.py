@@ -102,9 +102,10 @@ class DropoutBlock(nn.Module):
         if self.downsample is not None:
             identity = self.downsample(x)
 
+        out = torch.nn.functional.dropout(out, p=self.dropout_rate, training=self.training or self.force_dropout)
+
         out += identity
         out = self.relu(out)
-        out = torch.nn.functional.dropout(out, p=self.dropout_rate, training=self.training or self.force_dropout)
 
         return out
 
