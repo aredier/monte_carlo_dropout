@@ -276,6 +276,17 @@ class DropoutResnet(nn.Module):
         self.avgpool = source_resnet.avgpool
         self.fc = source_resnet.fc
 
+    @staticmethod
+    def _set_force_dropout_on_layer(force_dropout: bool, layer: nn.Sequential):
+        for block in layer.children():
+            block.force_dropout = force_dropout
+
+    def set_force_dropout(self, force_dropout):
+        self._set_force_dropout_on_layer(force_dropout, self.layer1)
+        self._set_force_dropout_on_layer(force_dropout, self.layer2)
+        self._set_force_dropout_on_layer(force_dropout, self.layer3)
+        self._set_force_dropout_on_layer(force_dropout, self.layer4)
+
     def _make_layer(self, source_layer: nn.Sequential, dropout_rate):
         return nn.Sequential(*[DropoutBlock(block, dropout_rate) for block in source_layer.children()])
 
