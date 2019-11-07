@@ -72,6 +72,43 @@ class BasicBlock(nn.Module):
 
         return out
 
+class DropoutBlock(nn.Module):
+    """
+    same as a basic block but adding dropout to it
+    """
+
+    def __init__(self, basic_block: BasicBlock, dropout_rate: float = 0.):
+        super(DropoutBlock, self).__init__()
+        self.conv1 = basic_block.conv1
+        self.bn1 = basic_block.bn1
+        self.relu = basic_block.relu
+        self.drop1 = nn.Dropout2d(dropout_rate)
+        self.conv2 = basic_block.conv2
+        self.bn2 = basic_block.bn2
+        self.downsample = basic_block.downsample
+        self.stride = basic_block.stride
+        self.drop2 = nn.Dropout2d(dropout_rate)
+
+    def forward(self, x):
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.drop1(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+        out = self.drop2(out)
+
+        return out
+
+
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -193,6 +230,53 @@ class ResNet(nn.Module):
                                 norm_layer=norm_layer))
 
         return nn.Sequential(*layers)
+
+    def _forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return x
+
+    # Allow for accessing forward method in a inherited class
+    forward = _forward
+
+
+class DropoutResnet(nn.Module):
+    """adds dropout to an existing resnet"""
+
+    def __init__(self, source_resnet: ResNet):
+
+        super(DropoutResnet, self).__init__()
+        self._norm_layer = source_resnet._norm_layer
+
+        self.inplanes = source_resnet.inplanes
+        self.dilation = source_resnet.dilation
+        self.groups = source_resnet.groups
+        self.base_width = source_resnet.base_width
+        self.conv1 = source_resnet.conv1
+        self.bn1 = source_resnet.bn1
+        self.relu = source_resnet.relu
+        self.maxpool = source_resnet.relu
+        self.layer1 = self._make_layer(source_resnet.layer1)
+        self.layer2 = self._make_layer(source_resnet.layer2)
+        self.layer3 = self._make_layer(source_resnet.layer3)
+        self.layer4 = self._make_layer(source_resnet.layer4)
+        self.avgpool = source_resnet.avgpool
+        self.fc = source_resnet.fc
+
+    def _make_layer(self, source_layer: nn.Sequential):
+        return nn.Sequential(*[DropoutBlock(block) for block in source_layer.children()])
 
     def _forward(self, x):
         x = self.conv1(x)
