@@ -8,6 +8,7 @@ from fastai.basic_data import *
 from fastai.layers import *
 from fastai.callbacks.hooks import *
 
+from monte_carlo_dropout.mc_dropout import MCDropout
 from monte_carlo_dropout.model_meta import model_meta, _default_meta
 
 
@@ -22,7 +23,7 @@ def _get_sfs_idxs(sizes: Sizes) -> List[int]:
 class UnetBlock(Module):
     "A quasi-UNet block, using `PixelShuffle_ICNR upsampling`."
     def __init__(self, up_in_c: int, x_in_c: int, hook: Hook, final_div: bool = True, blur: bool = False,
-                 leaky: float = None, self_attention: bool = False, dropout_rate: float = .0, force_dropout: bool = False,
+                 leaky: float = None, self_attention: bool = False, dropout_rate: float = .0,
                  **kwargs):
         self.hook = hook
         self.shuf = PixelShuffle_ICNR(up_in_c, up_in_c//2, blur=blur, leaky=leaky, **kwargs)
@@ -31,9 +32,8 @@ class UnetBlock(Module):
         nf = ni if final_div else ni//2
         self.conv1 = conv_layer(ni, nf, leaky=leaky, **kwargs)
         self.conv2 = conv_layer(nf, nf, leaky=leaky, self_attention=self_attention, **kwargs)
+        self.dropout = MCDropout(dropout_rate)
         self.relu = relu(leaky=leaky)
-        self.dropout_rate = dropout_rate
-        self.force_dropout = force_dropout
 
     def forward(self, up_in: Tensor) -> Tensor:
         s = self.hook.stored
@@ -43,7 +43,7 @@ class UnetBlock(Module):
             up_out = F.interpolate(up_out, s.shape[-2:], mode='nearest')
         out = self.relu(torch.cat([up_out, self.bn(s)], dim=1))
         out = self.conv2(self.conv1(out))
-        out = nn.functional.dropout(out, self.dropout_rate, training=self.training or self.force_dropout)
+        out = self.dropout(out)
         return out
 
 
@@ -73,7 +73,7 @@ class DynamicUnet(SequentialEx):
             do_blur = blur and (not_final or blur_final)
             sa = self_attention and (i==len(sfs_idxs)-3)
             unet_block = UnetBlock(up_in_c, x_in_c, self.sfs[i], final_div=not_final, blur=do_blur, self_attention=sa,
-                                   dropout_rate=block_drate, force_dropout=False,
+                                   dropout_rate=block_drate,
                                    **kwargs).eval()
             layers.append(unet_block)
             x = unet_block(x)
@@ -86,7 +86,7 @@ class DynamicUnet(SequentialEx):
             layers.append(MergeLayer(dense=True))
             ni += in_channels(encoder)
             layers.append(res_block(ni, bottle=bottle, **kwargs))
-        layers += [nn.Dropout(final_drate)]
+        layers += [MCDropout(final_drate)]
         layers += [conv_layer(ni, n_classes, ks=1, use_activ=False, **kwargs)]
         if y_range is not None:
             layers.append(SigmoidRange(*y_range))
@@ -94,6 +94,18 @@ class DynamicUnet(SequentialEx):
 
     def __del__(self):
         if hasattr(self, "sfs"): self.sfs.remove()
+
+    @classmethod
+    def _set_force_dropout(cls, module: nn.Module, mode):
+        for submodule in module.children():
+            if isinstance(submodule, MCDropout):
+                submodule.force_dropout = mode
+            cls._set_force_dropout(submodule, mode)
+
+    def force_dropout(self, mode: bool = True):
+        self._set_force_dropout(self, mode)
+
+
 
 
 def has_pool_type(m):
