@@ -4,6 +4,7 @@ import torch.nn as nn
 
 __all__ = ['AlexNet', 'alexnet']
 
+from monte_carlo_dropout.mc_dropout import MCDropout
 
 model_urls = {
     'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth',
@@ -53,7 +54,6 @@ class DropOutAlexnet(nn.Module):
     def __init__(self, og_alex: AlexNet, conv_dropout: float, dense_dropout: float, force_dropout: bool):
 
         super().__init__()
-        self.conv_dropout = conv_dropout
         self.dense_dropout = dense_dropout
         self.force_dropout = force_dropout
 
@@ -62,23 +62,27 @@ class DropOutAlexnet(nn.Module):
         self.conv_1 = feature_layers[0]
         self.relu_1 = feature_layers[1]
         self.pool_1 = feature_layers[2]
+        self.dropout_1 = MCDropout(conv_dropout)
         self.conv_2 = feature_layers[3]
         self.relu_2 = feature_layers[4]
         self.pool_2 = feature_layers[5]
+        self.dropout_2 = MCDropout(conv_dropout)
         self.conv_3 = feature_layers[6]
         self.relu_3 = feature_layers[7]
+        self.dropout_3 = MCDropout(conv_dropout)
         self.conv_4 = feature_layers[8]
         self.relu_4 = feature_layers[9]
+        self.dropout_4 = MCDropout(conv_dropout)
         self.conv_5 = feature_layers[10]
         self.relu_5 = feature_layers[11]
         self.pool_3 = feature_layers[12]
 
         # classifier
         clasifier_layers = list(og_alex.classifier.children())
-        _ = clasifier_layers[0]
+        self.dropout_5 = MCDropout(dense_dropout)
         self.dense_1 = clasifier_layers[1]
         self.relu_6 = clasifier_layers[2]
-        _ = clasifier_layers[3]
+        self.dropout_6 = MCDropout(dense_dropout)
         self.dense_2 = clasifier_layers[4]
         self.relu_7 = clasifier_layers[5]
         self.dense_3 = clasifier_layers[6]
@@ -87,25 +91,25 @@ class DropOutAlexnet(nn.Module):
         out = self.conv_1(x)
         out = self.relu_1(out)
         out = self.pool_1(out)
-        out = nn.functional.dropout(out, self.conv_dropout, training=self.training or self.force_dropout)
+        out = self.dropout_1(out)
         out = self.conv_2(out)
         out = self.relu_2(out)
         out = self.pool_2(out)
-        out = nn.functional.dropout(out, self.conv_dropout, training=self.training or self.force_dropout)
+        out = self.dropout_2(out)
         out = self.conv_3(out)
         out = self.relu_3(out)
-        out = nn.functional.dropout(out, self.conv_dropout, training=self.training or self.force_dropout)
+        out = self.dropout_3(out)
         out = self.conv_4(out)
         out = self.relu_4(out)
-        out = nn.functional.dropout(out, self.conv_dropout, training=self.training or self.force_dropout)
+        out = self.dropout_4(out)
         out = self.conv_5(out)
         out = self.relu_5(out)
         out = self.pool_3(out)
 
-        out = nn.functional.dropout(out, self.dense_dropout, training=self.training or self.force_dropout)
+        out = self.dropout_5(out)
         out = self.dense_1(out)
         out = self.relu_6(out)
-        out = nn.functional.dropout(out, self.dense_dropout, training=self.training or self.force_dropout)
+        out = self.dropout_6(out)
         out = self.dense_2(out)
         out = self.relu_7(out)
         out = self.dense_3(out)
