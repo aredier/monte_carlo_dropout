@@ -105,12 +105,14 @@ class DynamicUnet(SequentialEx):
     def force_dropout(self, mode: bool = True):
         self._set_force_dropout(self, mode)
 
-    def get_mc_dropout_preds(self, n_iter=10, dtype = torch.float32, **pred_args):
-        preds = self.get_preds()[0].to(dtype)
-        for i in range(1, n_iter):
-            print(i)
-            preds += self.get_preds()[0].to(dtype)
-        return preds / n_iter
+
+def get_mc_dropout_preds(learner, n_iter=10, dtype=torch.float32, **pred_args):
+
+    preds = learner.get_preds()[0].to(dtype)
+    for i in range(1, n_iter):
+        print(i)
+        preds += learner.get_preds()[0].to(dtype)
+    return preds / n_iter
 
 
 
