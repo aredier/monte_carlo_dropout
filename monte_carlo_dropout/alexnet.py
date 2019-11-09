@@ -77,6 +77,8 @@ class DropOutAlexnet(nn.Module):
         self.relu_5 = feature_layers[11]
         self.pool_3 = feature_layers[12]
 
+        self.avgpool = og_alex.avgpool
+
         # classifier
         clasifier_layers = list(og_alex.classifier.children())
         self.dropout_5 = MCDropout(dense_dropout)
@@ -105,6 +107,8 @@ class DropOutAlexnet(nn.Module):
         out = self.conv_5(out)
         out = self.relu_5(out)
         out = self.pool_3(out)
+
+        out = self.avgpool(out)
 
         out = self.dropout_5(out)
         out = self.dense_1(out)
