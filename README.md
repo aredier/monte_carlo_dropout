@@ -7,7 +7,8 @@ cd monte_carlo_dropout
 pip install -e ./
 ```
 
-###usage
+### usage
+
 executing the ` unet_learner` function will give you the modified unet with dropout.
 using the `DropOutAlexnet` class will give you the alexnet architecture with dropout added.
 
